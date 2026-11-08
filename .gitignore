@@ -9,6 +9,12 @@ htmlcov/
 venv/
 .venv/
 env/
+node_modules/
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+**/dist/
+**/.vite/
 
 # Local Django data and secrets
 *.sqlite3

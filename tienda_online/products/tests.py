@@ -12,7 +12,7 @@ class PrecioFinalAPITestCase(TestCase):
     def setUp(self):
         self.client = APIClient()
         get_user_model().objects.create_user(
-            username='precio-user', password='precio-password'
+            username='precio-user', email='precio@example.com', password='precio-password'
         )
         electronics = Category.objects.create(name='Electrónica')
         clothing = Category.objects.create(name='Ropa')
@@ -26,7 +26,7 @@ class PrecioFinalAPITestCase(TestCase):
 
     def test_authenticated_final_price_returns_200(self):
         token_response = self.client.post(reverse('token_obtain_pair'), {
-            'username': 'precio-user', 'password': 'precio-password'
+            'email': 'precio@example.com', 'password': 'precio-password'
         }, format='json')
         self.assertEqual(token_response.status_code, 200)
         self.client.credentials(
@@ -51,6 +51,7 @@ class CategoryAPITestCase(TestCase):
         self.client = APIClient()
         user = get_user_model().objects.create_user(
             username='test-user',
+            email='test@example.com',
             password='test-password',
         )
         self.client.force_authenticate(user=user)
@@ -80,6 +81,7 @@ class ProductAPITestCase(TestCase):
         self.client = APIClient()
         user = get_user_model().objects.create_user(
             username='test-user',
+            email='test@example.com',
             password='test-password',
         )
         self.client.force_authenticate(user=user)
@@ -133,3 +135,37 @@ class ProductAPITestCase(TestCase):
 
         self.assertEqual(response.status_code, 204)
         self.assertFalse(Product.objects.filter(pk=self.product.pk).exists())
+
+
+class UserSecurityAPITestCase(TestCase):
+    def setUp(self):
+        self.admin = get_user_model().objects.create_superuser(
+            username='admin', email='admin@example.com', password='Admin-pass-123'
+        )
+        self.user = get_user_model().objects.create_user(
+            username='cliente', email='cliente@example.com', phone='6621234567', password='Original-pass-123'
+        )
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.admin)
+
+    def test_user_responses_never_include_password_hash(self):
+        response = self.client.get('/api/users/')
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn('password', response.data[0])
+
+        self.client.force_authenticate(user=self.user)
+        response = self.client.get('/api/auth/me/')
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn('password', response.data)
+        self.assertEqual(response.data['phone'], '6621234567')
+
+    def test_update_without_password_preserves_existing_password(self):
+        original_hash = self.user.password
+        response = self.client.patch(
+            f'/api/users/{self.user.pk}/', {'first_name': 'Ana'}, format='json'
+        )
+        self.assertEqual(response.status_code, 200)
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.password, original_hash)
+        self.assertTrue(self.user.check_password('Original-pass-123'))
+        self.assertNotIn('password', response.data)
